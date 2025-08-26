@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ product.name }} | Woodcrafts Australia</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .product-container { display: flex; gap: 40px; }
+        .product-image img { max-width: 400px; border: 1px solid #ccc; }
+        .product-details { max-width: 500px; }
+        .product-price { font-size: 1.5em; color: #b87333; margin: 20px 0; }
+        .product-description { margin-top: 20px; }
+        .buy-btn { background: #b87333; color: #fff; padding: 12px 32px; border: none; font-size: 1em; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="product-container">
+        <div class="product-image">
+            {% if product.image %}
+                <img src="{{ product.image.url }}" alt="{{ product.name }}">
+            {% else %}
+                <img src="https://via.placeholder.com/400x300?text=No+Image" alt="No image">
+            {% endif %}
+        </div>
+        <div class="product-details">
+            <h1>{{ product.name }}</h1>
+            <div class="product-price">${{ product.price }}</div>
+            <div class="product-description">{{ product.description|linebreaks }}</div>
+            <button class="buy-btn">Buy Now</button>
+        </div>
+    </div>
+</body>
+</html>
