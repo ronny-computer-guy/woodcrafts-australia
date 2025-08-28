@@ -1,0 +1,393 @@
+{% extends 'base.html' %}
+
+{% block title %}Checkout | Woodcrafts Australia{% endblock %}
+
+{% block content %}
+<style>
+    .checkout-container { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1fr 400px; gap: 50px; }
+    .checkout-form { background: #f9f9f9; padding: 30px; border-radius: 8px; }
+    .form-group { margin-bottom: 20px; }
+    .form-group label { display: block; margin-bottom: 5px; font-weight: 500; }
+    .form-group input, .form-group textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+    .order-summary { background: #fff; padding: 30px; border-radius: 8px; border: 1px solid #eee; }
+    .summary-item { display: flex; justify-content: between; padding: 10px 0; border-bottom: 1px solid #eee; }
+    .summary-total { font-weight: bold; font-size: 1.2em; color: #8B4513; padding-top: 15px; }
+    .place-order-btn { background: #8B4513; color: white; padding: 15px 30px; border: none; border-radius: 4px; font-size: 1.1em; cursor: pointer; width: 100%; }
+    .place-order-btn:hover { background: #A0522D; }
+    
+    #payment-request-button {
+        margin: 20px 0;
+    }
+    
+    .payment-divider {
+        text-align: center;
+        margin: 20px 0;
+        position: relative;
+    }
+    
+    .payment-divider::before {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background: #ddd;
+    }
+    
+    .payment-divider span {
+        background: #f9f9f9;
+        padding: 0 15px;
+        color: #666;
+    }
+    
+    #card-errors {
+        color: #fa755a;
+        margin-top: 10px;
+    }
+</style>
+
+<div class="checkout-container">
+    <div class="checkout-form">
+        <h2>Billing Information</h2>
+        
+        <!-- Express Checkout Element for Apple Pay / Google Pay / Link -->
+        <div id="express-checkout-element">
+            <!-- Stripe Express Checkout will create elements here -->
+        </div>
+        <div class="payment-divider" id="payment-divider" style="display: none;">
+            <span>OR PAY WITH CARD</span>
+        </div>
+        
+        <form id="payment-form">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="first_name">First Name:</label>
+                <input type="text" id="first_name" name="first_name" required>
+            </div>
+            <div class="form-group">
+                <label for="last_name">Last Name:</label>
+                <input type="text" id="last_name" name="last_name" required>
+            </div>
+            <div class="form-group">
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div class="form-group">
+                <label for="phone">Phone:</label>
+                <input type="tel" id="phone" name="phone" required>
+            </div>
+            <div class="form-group">
+                <label for="address">Address:</label>
+                <textarea id="address" name="address" rows="3" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="city">City:</label>
+                <input type="text" id="city" name="city" required>
+            </div>
+            <div class="form-group">
+                <label for="state">State:</label>
+                <input type="text" id="state" name="state" required>
+            </div>
+            <div class="form-group">
+                <label for="postal_code">Postal Code:</label>
+                <input type="text" id="postal_code" name="postal_code" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Card Information</label>
+                <div id="card-element">
+                    <!-- Stripe Elements will create form elements here -->
+                </div>
+                <div id="card-errors" role="alert"></div>
+            </div>
+            
+            <button type="submit" class="place-order-btn" id="submit-payment">
+                Complete Payment
+            </button>
+        </form>
+    </div>
+    
+    <div class="order-summary">
+        <h3>Order Summary</h3>
+        <div id="checkout-items">
+            <!-- Items will be populated by JavaScript -->
+        </div>
+        <div class="summary-total" id="checkout-total">
+            Total: $0.00
+        </div>
+    </div>
+</div>
+
+<script src="https://js.stripe.com/v3/"></script>
+<script>
+function getCart() {
+    // This function should return the cart object from sessionStorage
+    const cart = sessionStorage.getItem('cart');
+    return cart ? JSON.parse(cart) : {};
+}
+
+function updateCheckoutSummary() {
+    const cart = getCart();
+    const checkoutItemsContainer = document.getElementById('checkout-items');
+    const checkoutTotalElement = document.getElementById('checkout-total');
+    
+    if (Object.keys(cart).length === 0) {
+        checkoutItemsContainer.innerHTML = '<p>Your cart is empty</p>';
+        checkoutTotalElement.innerHTML = 'Total: $0.00';
+        return;
+    }
+    
+    let itemsHTML = '';
+    let total = 0;
+    
+    Object.entries(cart).forEach(([productId, item]) => {
+        const itemTotal = item.price * item.quantity;
+        total += itemTotal;
+        
+        itemsHTML += `
+            <div class="summary-item">
+                <span>${item.name} (${item.quantity})</span>
+                <span>$${itemTotal.toFixed(2)}</span>
+            </div>
+        `;
+    });
+    
+    checkoutItemsContainer.innerHTML = itemsHTML;
+    checkoutTotalElement.innerHTML = `Total: $${total.toFixed(2)}`;
+}
+
+// Initialize Stripe
+console.log('Stripe key:', '{{ stripe_publishable_key }}');
+const stripe = Stripe('{{ stripe_publishable_key }}');
+const elements = stripe.elements();
+
+// Create card element
+const cardElement = elements.create('card');
+cardElement.mount('#card-element');
+
+// Create Express Checkout Element (replaces Payment Request Button)
+const expressCheckoutElement = elements.create('expressCheckout', {
+    layout: {
+        maxColumns: 1,
+        maxRows: 1,
+        overflow: 'never'
+    },
+    buttonTheme: {
+        applePay: 'black',
+        googlePay: 'black'
+    },
+    paymentMethods: {
+        applePay: 'always',
+        googlePay: 'always',
+        link: 'auto'
+    }
+});
+
+// Mount Express Checkout Element
+expressCheckoutElement.mount('#express-checkout-element');
+
+// Show divider when Express Checkout is ready
+expressCheckoutElement.on('ready', (event) => {
+    console.log('Express Checkout ready:', event);
+    if (event.availablePaymentMethods && Object.keys(event.availablePaymentMethods).length > 0) {
+        document.getElementById('payment-divider').style.display = 'block';
+    }
+});
+
+// Handle Express Checkout payment
+expressCheckoutElement.on('click', async (event) => {
+    console.log('Express Checkout clicked');
+    
+    const cart = getCart();
+    const total = Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    try {
+        // Create payment intent on server
+        const formData = new FormData();
+        formData.append('cart_data', JSON.stringify(cart));
+        formData.append('total_amount', total.toFixed(2));
+        formData.append('first_name', 'Express');
+        formData.append('last_name', 'Checkout');
+        formData.append('email', 'express@checkout.com');
+        formData.append('phone', '0000000000');
+        formData.append('address', 'Express Checkout Address');
+        formData.append('city', 'Express Checkout');
+        formData.append('state', 'VIC');
+        formData.append('postal_code', '3000');
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        const response = await fetch('{% url "checkout" %}', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Configure Express Checkout with client secret
+        const {error: submitError} = await elements.submit();
+        if (submitError) {
+            throw new Error(submitError.message);
+        }
+        
+        // Confirm payment
+        const {error} = await stripe.confirmPayment({
+            elements,
+            clientSecret: data.client_secret,
+            confirmParams: {
+                return_url: `${window.location.origin}/order-confirmation/${data.order_id}/`,
+            },
+            redirect: 'if_required'
+        });
+        
+        if (error) {
+            throw new Error(error.message);
+        } else {
+            // Payment succeeded
+            clearCart();
+            window.location.href = `/order-confirmation/${data.order_id}/`;
+        }
+        
+    } catch (error) {
+        console.error('Express Checkout error:', error);
+        document.getElementById('card-errors').textContent = error.message;
+    }
+});
+
+// Update checkout summary when page loads
+document.addEventListener('DOMContentLoaded', function() {
+    updateCheckoutSummary();
+    
+    // Update Express Checkout total
+    const cart = getCart();
+    const total = Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    if (total > 0) {
+        expressCheckoutElement.update({
+            amount: Math.round(total * 100), // Convert to cents
+        });
+    }
+});
+
+// Handle form submission
+document.getElementById('payment-form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    
+    const submitButton = document.getElementById('submit-payment');
+    submitButton.disabled = true;
+    submitButton.textContent = 'Processing...';
+    
+    // Get cart data
+    const cart = getCart();
+    const total = Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    // Create payment intent on server
+    const formData = new FormData(event.target);
+    formData.append('cart_data', JSON.stringify(cart));
+    formData.append('total_amount', total.toFixed(2));
+    
+    try {
+        const response = await fetch('{% url "checkout" %}', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error);
+        }
+        
+        // Confirm payment with Stripe
+        const {error, paymentIntent} = await stripe.confirmCardPayment(data.client_secret, {
+            payment_method: {
+                card: cardElement,
+                billing_details: {
+                    name: `${formData.get('first_name')} ${formData.get('last_name')}`,
+                    email: formData.get('email'),
+                    address: {
+                        line1: formData.get('address'),
+                        city: formData.get('city'),
+                        state: formData.get('state'),
+                        postal_code: formData.get('postal_code'),
+                        country: 'AU'
+                    }
+                }
+            }
+        });
+        
+        if (error) {
+            throw new Error(error.message);
+        } else {
+            // Payment succeeded
+            clearCart();
+            window.location.href = `/order-confirmation/${data.order_id}/`;
+        }
+        
+    } catch (error) {
+        document.getElementById('card-errors').textContent = error.message;
+        submitButton.disabled = false;
+        submitButton.textContent = 'Complete Payment';
+    }
+});
+
+// Handle Apple Pay/Google Pay payment
+paymentRequest.on('paymentmethod', async (ev) => {
+    const cart = getCart();
+    const total = Object.values(cart).reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    
+    try {
+        const formData = new FormData();
+        formData.append('cart_data', JSON.stringify(cart));
+        formData.append('total_amount', total.toFixed(2));
+        formData.append('first_name', ev.payerName?.split(' ')[0] || 'Digital');
+        formData.append('last_name', ev.payerName?.split(' ').slice(1).join(' ') || 'Payment');
+        formData.append('email', ev.payerEmail || 'digital@payment.com');
+        formData.append('phone', '0000000000');
+        formData.append('address', 'Digital Payment Address');
+        formData.append('city', 'Digital Payment');
+        formData.append('state', 'VIC');
+        formData.append('postal_code', '3000');
+        formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+        
+        const response = await fetch('{% url "checkout" %}', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            ev.complete('fail');
+            throw new Error(data.error);
+        }
+        
+        const {error} = await stripe.confirmCardPayment(
+            data.client_secret,
+            {payment_method: ev.paymentMethod.id},
+            {handleActions: false}
+        );
+        
+        if (error) {
+            ev.complete('fail');
+            throw new Error(error.message);
+        } else {
+            ev.complete('success');
+            clearCart();
+            window.location.href = `/order-confirmation/${data.order_id}/`;
+        }
+        
+    } catch (error) {
+        ev.complete('fail');
+        document.getElementById('card-errors').textContent = error.message;
+    }
+});
+
+// Update checkout summary when page loads
+document.addEventListener('DOMContentLoaded', updateCheckoutSummary);
+</script>
+{% endblock %}

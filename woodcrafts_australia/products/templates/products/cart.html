@@ -1,0 +1,199 @@
+{% extends 'base.html' %}
+
+{% block title %}Shopping Cart | Woodcrafts Australia{% endblock %}
+
+{% block content %}
+<style>
+    .cart-container { max-width: 800px; margin: 0 auto; }
+    .cart-item { display: flex; align-items: center; padding: 20px; border-bottom: 1px solid #eee; }
+    .item-image img { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; }
+    .item-details { flex: 1; margin-left: 20px; }
+    .item-name { font-weight: 500; margin-bottom: 5px; }
+    .item-price { color: #8B4513; font-weight: bold; }
+    .quantity-controls { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+    .quantity-btn { background: #8B4513; color: white; border: none; width: 30px; height: 30px; border-radius: 4px; cursor: pointer; font-size: 1.2em; }
+    .quantity-btn:hover { background: #A0522D; }
+    .quantity-input { width: 60px; text-align: center; padding: 5px; border: 1px solid #ddd; border-radius: 4px; }
+    .remove-btn { background: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; }
+    .remove-btn:hover { background: #c82333; }
+    .item-total { font-weight: bold; font-size: 1.1em; }
+    .cart-total { text-align: right; padding: 20px; font-size: 1.3em; font-weight: bold; color: #8B4513; }
+    .checkout-btn { background: #8B4513; color: white; padding: 15px 30px; border: none; border-radius: 4px; font-size: 1.1em; cursor: pointer; text-decoration: none; display: inline-block; }
+    .checkout-btn:hover { background: #A0522D; }
+    .empty-cart { text-align: center; padding: 50px; color: #666; }
+</style>
+
+<div class="cart-container">
+    <h1>Shopping Cart</h1>
+    
+    <div id="cart-items">
+        <!-- Cart items will be populated by JavaScript -->
+    </div>
+    
+    <div class="cart-total" id="cart-total">
+        Total: $0.00
+    </div>
+    
+    <div style="text-align: center; margin-top: 30px;" id="checkout-section">
+        <a href="{% url 'checkout' %}" class="checkout-btn">Proceed to Checkout</a>
+    </div>
+</div>
+
+<script>
+// Cart management functions
+function getCart() {
+    return JSON.parse(sessionStorage.getItem('cart') || '{}');
+}
+
+function saveCart(cart) {
+    sessionStorage.setItem('cart', JSON.stringify(cart));
+    updateCartDisplay();
+    updateCartCount();
+}
+
+function updateCartCount() {
+    const cart = getCart();
+    const count = Object.values(cart).reduce((total, item) => total + item.quantity, 0);
+    sessionStorage.setItem('cartCount', count);
+    
+    const cartCountElement = document.getElementById('cart-count');
+    if (cartCountElement) {
+        cartCountElement.textContent = count;
+        cartCountElement.style.display = count > 0 ? 'flex' : 'none';
+    }
+}
+
+function updateCartDisplay() {
+    const cart = getCart();
+    const cartItemsContainer = document.getElementById('cart-items');
+    const cartTotalElement = document.getElementById('cart-total');
+    const checkoutSection = document.getElementById('checkout-section');
+    
+    if (Object.keys(cart).length === 0) {
+        cartItemsContainer.innerHTML = `
+            <div class="empty-cart">
+                <h2>Your cart is empty</h2>
+                <p><a href="{% url 'product_list' %}">Continue shopping</a></p>
+            </div>
+        `;
+        cartTotalElement.style.display = 'none';
+        checkoutSection.style.display = 'none';
+        return;
+    }
+    
+    let cartHTML = '';
+    let total = 0;
+    
+    Object.entries(cart).forEach(([productId, item]) => {
+        const itemTotal = item.price * item.quantity;
+        total += itemTotal;
+        
+        cartHTML += `
+            <div class="cart-item" data-product-id="${productId}">
+                <div class="item-image">
+                    <img src="${item.image || 'https://via.placeholder.com/80x80?text=No+Image'}" alt="${item.name}">
+                </div>
+                <div class="item-details">
+                    <div class="item-name">${item.name}</div>
+                    <div class="item-price">$${item.price.toFixed(2)}</div>
+                    <div class="quantity-controls">
+                        <button class="quantity-btn" onclick="decreaseQuantity(${productId})">-</button>
+                        <input type="number" class="quantity-input" value="${item.quantity}" 
+                               onchange="updateQuantity(${productId}, this.value)" min="1">
+                        <button class="quantity-btn" onclick="increaseQuantity(${productId})">+</button>
+                        <button class="remove-btn" onclick="removeItem(${productId})">Remove</button>
+                    </div>
+                </div>
+                <div class="item-total">
+                    $${itemTotal.toFixed(2)}
+                </div>
+            </div>
+        `;
+    });
+    
+    cartItemsContainer.innerHTML = cartHTML;
+    cartTotalElement.innerHTML = `Total: $${total.toFixed(2)}`;
+    cartTotalElement.style.display = 'block';
+    checkoutSection.style.display = 'block';
+}
+
+function addToCart(productId, name, price, image, quantity = 1) {
+    const cart = getCart();
+    
+    if (cart[productId]) {
+        cart[productId].quantity += quantity;
+    } else {
+        cart[productId] = {
+            name: name,
+            price: parseFloat(price),
+            image: image,
+            quantity: quantity
+        };
+    }
+    
+    saveCart(cart);
+}
+
+function updateQuantity(productId, newQuantity) {
+    const cart = getCart();
+    newQuantity = parseInt(newQuantity);
+    
+    if (newQuantity <= 0) {
+        removeItem(productId);
+        return;
+    }
+    
+    if (cart[productId]) {
+        cart[productId].quantity = newQuantity;
+        saveCart(cart);
+    }
+}
+
+function increaseQuantity(productId) {
+    const cart = getCart();
+    if (cart[productId]) {
+        cart[productId].quantity += 1;
+        saveCart(cart);
+    }
+}
+
+function decreaseQuantity(productId) {
+    const cart = getCart();
+    if (cart[productId]) {
+        if (cart[productId].quantity <= 1) {
+            removeItem(productId);
+        } else {
+            cart[productId].quantity -= 1;
+            saveCart(cart);
+        }
+    }
+}
+
+function removeItem(productId) {
+    const cart = getCart();
+    delete cart[productId];
+    saveCart(cart);
+}
+
+function clearCart() {
+    sessionStorage.removeItem('cart');
+    sessionStorage.setItem('cartCount', 0);
+    updateCartDisplay();
+    updateCartCount();
+}
+
+// Initialize cart display on page load
+document.addEventListener('DOMContentLoaded', function() {
+    updateCartDisplay();
+    updateCartCount();
+});
+
+// Make functions available globally
+window.addToCart = addToCart;
+window.updateQuantity = updateQuantity;
+window.increaseQuantity = increaseQuantity;
+window.decreaseQuantity = decreaseQuantity;
+window.removeItem = removeItem;
+window.clearCart = clearCart;
+</script>
+{% endblock %}

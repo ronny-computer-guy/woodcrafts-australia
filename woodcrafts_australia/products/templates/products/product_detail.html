@@ -1,33 +1,73 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ product.name }} | Woodcrafts Australia</title>
+{% extends 'base.html' %}
+
+{% block title %}{{ product.name }} | Woodcrafts Australia{% endblock %}
+
+{% block content %}
     <style>
-        body { font-family: Arial, sans-serif; margin: 40px; }
-        .product-container { display: flex; gap: 40px; }
-        .product-image img { max-width: 400px; border: 1px solid #ccc; }
-        .product-details { max-width: 500px; }
-        .product-price { font-size: 1.5em; color: #b87333; margin: 20px 0; }
-        .product-description { margin-top: 20px; }
-        .buy-btn { background: #b87333; color: #fff; padding: 12px 32px; border: none; font-size: 1em; cursor: pointer; }
+        .product-container { display: flex; gap: 50px; align-items: flex-start; }
+        .product-image { flex: 1; }
+        .product-image img { width: 100%; max-width: 500px; border: 1px solid #ddd; border-radius: 8px; }
+        .product-details { flex: 1; }
+        .product-title { color: #8B4513; font-size: 2em; margin-bottom: 20px; }
+        .product-price { font-size: 1.8em; color: #8B4513; font-weight: bold; margin: 20px 0; }
+        .product-description { line-height: 1.6; margin: 20px 0; }
+        .buy-btn { 
+            background: #8B4513; 
+            color: #fff; 
+            padding: 15px 35px; 
+            border: none; 
+            font-size: 1.1em; 
+            border-radius: 4px;
+            cursor: pointer; 
+            transition: background 0.3s;
+        }
+        .buy-btn:hover { background: #A0522D; }
+        .back-link { color: #8B4513; text-decoration: none; margin-bottom: 20px; display: inline-block; }
+        .back-link:hover { text-decoration: underline; }
     </style>
-</head>
-<body>
+
+    <a href="{% url 'product_list' %}" class="back-link">← Back to Products</a>
+
     <div class="product-container">
         <div class="product-image">
             {% if product.image %}
                 <img src="{{ product.image.url }}" alt="{{ product.name }}">
             {% else %}
-                <img src="https://via.placeholder.com/400x300?text=No+Image" alt="No image">
+                <img src="https://via.placeholder.com/500x400?text=No+Image" alt="No image">
             {% endif %}
         </div>
         <div class="product-details">
-            <h1>{{ product.name }}</h1>
+            <h1 class="product-title">{{ product.name }}</h1>
             <div class="product-price">${{ product.price }}</div>
             <div class="product-description">{{ product.description|linebreaks }}</div>
-            <button class="buy-btn">Buy Now</button>
+            
+            <form id="cart-form" onsubmit="return false;">
+                {% csrf_token %}
+                <div style="margin: 20px 0;">
+                    <label for="quantity">Quantity:</label>
+                    <input type="number" id="quantity" name="quantity" value="1" min="1" style="width: 60px; padding: 5px; margin-left: 10px; border: 1px solid #ddd; border-radius: 4px;">
+                </div>
+                <button type="button" class="buy-btn" onclick="addProductToCart()">🛒 Add to Cart</button>
+            </form>
         </div>
     </div>
-</body>
-</html>
+
+    <script>
+        function addProductToCart() {
+            const quantity = parseInt(document.getElementById('quantity').value);
+            const productId = "{{ product.id }}";
+            const productName = "{{ product.name|escapejs }}";
+            const productPrice = "{{ product.price }}";
+            const productImage = "{% if product.image %}{{ product.image.url }}{% endif %}";
+            
+            // Add to client-side cart
+            addToCart(productId, productName, productPrice, productImage, quantity);
+            
+            // Show success message
+            alert('Product added to cart!');
+            
+            // Reset quantity
+            document.getElementById('quantity').value = 1;
+        }
+    </script>
+{% endblock %}

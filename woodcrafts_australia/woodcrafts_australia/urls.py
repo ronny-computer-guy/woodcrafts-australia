@@ -18,13 +18,18 @@ from django.contrib import admin
 from django.urls import path
 from django.conf import settings
 from django.conf.urls.static import static
-from products.views import home, product_detail, product_list
+from products.views import home, product_detail, product_list, add_to_cart_view, cart_view, checkout_view, order_confirmation
 
 urlpatterns = [
     path('', home, name='home'),
     path('admin/', admin.site.urls),
     path('product/<int:pk>/', product_detail, name='product_detail'),
     path('products/', product_list, name='product_list'),
+    path('category/<slug:category_slug>/', product_list, name='product_list_by_category'),
+    path('add-to-cart/<int:product_id>/', add_to_cart_view, name='add_to_cart'),
+    path('cart/', cart_view, name='cart'),
+    path('checkout/', checkout_view, name='checkout'),
+    path('order-confirmation/<int:order_id>/', order_confirmation, name='order_confirmation'),
 ]
 
 if settings.DEBUG:
